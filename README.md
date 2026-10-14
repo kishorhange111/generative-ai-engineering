@@ -18,7 +18,7 @@ Hands-on projects covering the core skills of building production LLM systems �
 ## Agents
 | Project | Techniques | Result |
 |---|---|---|
-| [Function-calling LLM](agents/function-calling-llm) | Qwen2.5-1.5B + LoRA, tool-call exact match, JSON validity, abstention | exact tool calls **16.7 % → 94.8 %**, valid JSON **100 %** |
+| [Function-calling LLM](agents/function-calling-llm) | Qwen2.5-1.5B + LoRA, tool-call exact match, JSON validity, abstention | exact tool calls **16.7 % → 94.8 %** in glaive's format (zero-shot used a non-native format, see caveats), valid JSON **100 %** |
 
 ## Retrieval-augmented generation
 | Project | Techniques | Result |
