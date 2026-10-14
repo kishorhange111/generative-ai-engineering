@@ -1,0 +1,6 @@
+# Lint + unit tests (CPU only, no downloads). CI installs a CPU build of torch separately.
+ruff>=0.6,<1
+pytest>=8,<10
+numpy>=1.26,<3
+scikit-learn>=1.5,<2
+jiwer>=3.0,<5
