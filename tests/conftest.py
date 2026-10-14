@@ -1,4 +1,5 @@
 """Pytest setup: make the repository root importable so tests can `import common`."""
+
 import os
 import sys
 

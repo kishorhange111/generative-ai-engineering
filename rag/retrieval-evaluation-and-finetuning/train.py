@@ -31,6 +31,7 @@ and unit-tested in `tests/test_retrieval.py`):
                   (Recall@k bounds what the LLM can ever see in a RAG prompt)
     MRR@10    - how high the FIRST relevant passage appears
 """
+
 import json
 import os
 import sys
@@ -42,14 +43,14 @@ import numpy as np
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 from common.retrieval import bm25_tokenize, ir_metrics
 
-QUICK = os.environ.get("QUICK") == "1"                    # small corpus + 50 questions smoke test
+QUICK = os.environ.get("QUICK") == "1"  # small corpus + 50 questions smoke test
 OUT = os.environ.get("OUT", os.path.join(os.path.dirname(os.path.abspath(__file__)), "results"))
 EMBEDDER = "BAAI/bge-small-en-v1.5"
 RERANKER = "BAAI/bge-reranker-base"
-QUERY_PREFIX = "Represent this sentence for searching relevant passages: "   # bge's query instruction
+QUERY_PREFIX = "Represent this sentence for searching relevant passages: "  # bge's query instruction
 EPOCHS = 1 if QUICK else 3
-BATCH = 64            # also the number of in-batch negatives (+1) for the contrastive loss
-RERANK_TOP = 50       # how many first-stage candidates the cross-encoder re-scores
+BATCH = 64  # also the number of in-batch negatives (+1) for the contrastive loss
+RERANK_TOP = 50  # how many first-stage candidates the cross-encoder re-scores
 
 
 # ---------------------------------------------------------------------------
@@ -118,13 +119,14 @@ def dense_search(model, docs, doc_ids, qids, qtext, k=100):
     t = time.time()
     # Passages are embedded WITHOUT the query prefix (bge is asymmetric: only queries get the instruction).
     doc_emb = model.encode(docs, batch_size=256, normalize_embeddings=True, show_progress_bar=False).astype("float32")
-    index = faiss.IndexFlatIP(doc_emb.shape[1])   # exact search; normalized vectors -> inner product = cosine
+    index = faiss.IndexFlatIP(doc_emb.shape[1])  # exact search; normalized vectors -> inner product = cosine
     index.add(doc_emb)
     index_s = time.time() - t
-    q_emb = model.encode([QUERY_PREFIX + qtext[q] for q in qids], batch_size=256, normalize_embeddings=True,
-                         show_progress_bar=False).astype("float32")
+    q_emb = model.encode(
+        [QUERY_PREFIX + qtext[q] for q in qids], batch_size=256, normalize_embeddings=True, show_progress_bar=False
+    ).astype("float32")
     t = time.time()
-    _, idx = index.search(q_emb, k)               # (n_queries, k) row indices, best first
+    _, idx = index.search(q_emb, k)  # (n_queries, k) row indices, best first
     search_ms = 1000 * (time.time() - t) / len(qids)
     return {q: [doc_ids[i] for i in row] for q, row in zip(qids, idx)}, index_s, search_ms
 
@@ -168,14 +170,23 @@ def finetune(train_rel, qtext, docs_by_id):
     print(f"training pairs: {len(pairs)}")
     ds = Dataset.from_dict({"anchor": [p[0] for p in pairs], "positive": [p[1] for p in pairs]})
     model = SentenceTransformer(EMBEDDER)
-    model.max_seq_length = 256       # truncate long forum posts: faster, and the start carries most meaning
+    model.max_seq_length = 256  # truncate long forum posts: faster, and the start carries most meaning
     args = SentenceTransformerTrainingArguments(
-        output_dir=os.path.expanduser("~/checkpoints/bge_fiqa"), num_train_epochs=EPOCHS,
-        per_device_train_batch_size=BATCH, learning_rate=2e-5, warmup_steps=0.1,
-        fp16=True, batch_sampler=BatchSamplers.NO_DUPLICATES,   # no duplicate passages -> no false in-batch negatives
-        logging_steps=50, save_strategy="no", report_to="none", seed=42)
-    trainer = SentenceTransformerTrainer(model=model, args=args, train_dataset=ds,
-                                         loss=losses.MultipleNegativesRankingLoss(model))
+        output_dir=os.path.expanduser("~/checkpoints/bge_fiqa"),
+        num_train_epochs=EPOCHS,
+        per_device_train_batch_size=BATCH,
+        learning_rate=2e-5,
+        warmup_steps=0.1,
+        fp16=True,
+        batch_sampler=BatchSamplers.NO_DUPLICATES,  # no duplicate passages -> no false in-batch negatives
+        logging_steps=50,
+        save_strategy="no",
+        report_to="none",
+        seed=42,
+    )
+    trainer = SentenceTransformerTrainer(
+        model=model, args=args, train_dataset=ds, loss=losses.MultipleNegativesRankingLoss(model)
+    )
     t = time.time()
     trainer.train()
     return model, (time.time() - t) / 60, len(pairs)
@@ -227,7 +238,9 @@ def main():
         f.write(f"FiQA-2018 test set: {len(qids)} questions over {len(docs):,} passages\n\n")
         f.write("| retriever | nDCG@10 | Recall@10 | Recall@100 | MRR@10 |\n|---|---|---|---|---|\n")
         for name, m in results.items():
-            f.write(f"| {name} | {m['nDCG@10']:.3f} | {m['Recall@10']:.3f} | {m['Recall@100']:.3f} | {m['MRR@10']:.3f} |\n")
+            f.write(
+                f"| {name} | {m['nDCG@10']:.3f} | {m['Recall@10']:.3f} | {m['Recall@100']:.3f} | {m['MRR@10']:.3f} |\n"
+            )
     plot(results)
     print(json.dumps(notes, indent=2))
     print("DONE")
@@ -236,7 +249,8 @@ def main():
 def plot(results):
     """Grouped bar chart of nDCG@10 / Recall@10 / Recall@100 per pipeline stage."""
     import matplotlib
-    matplotlib.use("Agg")   # no display on a cloud VM
+
+    matplotlib.use("Agg")  # no display on a cloud VM
     import matplotlib.pyplot as plt
 
     names = list(results)
@@ -246,7 +260,9 @@ def plot(results):
         # Offset each metric's bar left / centre / right of the stage's tick.
         ax.bar(x + (i - 1) * 0.27, [results[n][metric] for n in names], 0.27, label=metric, color=color)
     # Break long stage names over lines so the tick labels do not overlap.
-    ax.set_xticks(x, [n.replace(" (", "\n(").replace(" +", "\n+").replace(" fine", "\nfine") for n in names], fontsize=8)
+    ax.set_xticks(
+        x, [n.replace(" (", "\n(").replace(" +", "\n+").replace(" fine", "\nfine") for n in names], fontsize=8
+    )
     ax.legend()
     ax.set_title("FiQA-2018 retrieval quality by pipeline stage")
     fig.tight_layout()

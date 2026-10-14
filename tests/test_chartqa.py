@@ -1,29 +1,36 @@
 """Tests for the ChartQA prompt and relaxed-accuracy metric."""
+
 import pytest
 
 from common.chartqa import INSTRUCTION, chart_messages, relaxed_match
 
 
-@pytest.mark.parametrize("pred, gold", [
-    ("23.4", "23.4"),
-    ("24", "23"),          # within 5 %
-    ("1,000", "1000"),
-    ("45%", "45"),
-    ("$12.5", "12.5"),
-    ("Yes.", "yes"),
-    (" Canada ", "canada"),
-    ("0", "0"),
-])
+@pytest.mark.parametrize(
+    "pred, gold",
+    [
+        ("23.4", "23.4"),
+        ("24", "23"),  # within 5 %
+        ("1,000", "1000"),
+        ("45%", "45"),
+        ("$12.5", "12.5"),
+        ("Yes.", "yes"),
+        (" Canada ", "canada"),
+        ("0", "0"),
+    ],
+)
 def test_relaxed_match_accepts(pred, gold):
     assert relaxed_match(pred, gold)
 
 
-@pytest.mark.parametrize("pred, gold", [
-    ("25", "23"),          # 8.7 % off
-    ("0.1", "0"),          # gold 0 requires equality
-    ("Canada", "USA"),
-    ("12 million", "12"),  # text vs number -> exact string match fails
-])
+@pytest.mark.parametrize(
+    "pred, gold",
+    [
+        ("25", "23"),  # 8.7 % off
+        ("0.1", "0"),  # gold 0 requires equality
+        ("Canada", "USA"),
+        ("12 million", "12"),  # text vs number -> exact string match fails
+    ],
+)
 def test_relaxed_match_rejects(pred, gold):
     assert not relaxed_match(pred, gold)
 

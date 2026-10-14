@@ -1,4 +1,5 @@
 """Tests for the guardrail's binary-classification metrics."""
+
 import pytest
 
 pytest.importorskip("sklearn")
@@ -8,7 +9,7 @@ from common.classification import binary_scores  # noqa: E402
 
 def test_binary_scores_hand_computed():
     y = [1, 1, 1, 0, 0, 0, 0]
-    p = [0.9, 0.6, 0.2, 0.7, 0.1, 0.3, 0.4]   # TP=2, FN=1, FP=1, TN=3
+    p = [0.9, 0.6, 0.2, 0.7, 0.1, 0.3, 0.4]  # TP=2, FN=1, FP=1, TN=3
     s = binary_scores(y, p)
     assert s["precision"] == pytest.approx(2 / 3)
     assert s["recall"] == pytest.approx(2 / 3)

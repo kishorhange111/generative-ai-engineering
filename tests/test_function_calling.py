@@ -1,4 +1,5 @@
 """Tests for the glaive parser, the tool-call parser and the agent metrics."""
+
 import json
 
 from common.function_calling import INSTRUCTION, call_metrics, fc_messages, parse_call, parse_glaive_example
@@ -7,8 +8,10 @@ SYSTEM = 'SYSTEM: You are a helpful assistant with access to the following funct
 
 
 def test_parse_glaive_function_call():
-    chat = ('USER: Convert 100 USD to INR. ASSISTANT: <functioncall> {"name": "get_rate", '
-            '"arguments": \'{"base": "USD", "target": "INR"}\'} <|endoftext|> FUNCTION RESPONSE: {"rate": 83}')
+    chat = (
+        'USER: Convert 100 USD to INR. ASSISTANT: <functioncall> {"name": "get_rate", '
+        '"arguments": \'{"base": "USD", "target": "INR"}\'} <|endoftext|> FUNCTION RESPONSE: {"rate": 83}'
+    )
     ex = parse_glaive_example({"system": SYSTEM, "chat": chat})
     assert ex["ok"]
     assert ex["user"] == "Convert 100 USD to INR."
@@ -45,17 +48,17 @@ def test_parse_call():
     assert parse_call('<functioncall> {"name": "f", "arguments": {}}')[1]
     assert parse_call("plain answer") == (None, False)
     assert parse_call("<functioncall>{not json}</functioncall>") == (None, False)
-    assert parse_call('<functioncall>{"arguments": {}}</functioncall>')[1] is False   # no name
+    assert parse_call('<functioncall>{"arguments": {}}</functioncall>')[1] is False  # no name
 
 
 def test_call_metrics():
     gold = json.dumps({"name": "f", "arguments": {"x": 1}})
     outputs = [
-        '<functioncall>{"name": "f", "arguments": {"x": 1}}</functioncall>',   # perfect
-        '<functioncall>{"name": "f", "arguments": {"x": 2}}</functioncall>',   # right tool, wrong args
-        "Sure! Here you go.",                                                  # should have called
-        "Hello there",                                                         # correctly no call
-        "<functioncall>{oops}</functioncall>",                                 # called when it should not
+        '<functioncall>{"name": "f", "arguments": {"x": 1}}</functioncall>',  # perfect
+        '<functioncall>{"name": "f", "arguments": {"x": 2}}</functioncall>',  # right tool, wrong args
+        "Sure! Here you go.",  # should have called
+        "Hello there",  # correctly no call
+        "<functioncall>{oops}</functioncall>",  # called when it should not
     ]
     m = call_metrics(outputs, [gold, gold, gold, "", ""])
     assert m["test_examples"] == 5 and m["examples_needing_a_call"] == 3

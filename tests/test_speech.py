@@ -1,4 +1,5 @@
 """Tests for the corpus-level WER / CER wrapper."""
+
 import pytest
 
 pytest.importorskip("jiwer")

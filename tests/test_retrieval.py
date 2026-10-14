@@ -1,4 +1,5 @@
 """Tests for the from-scratch IR metrics."""
+
 import math
 
 import pytest
@@ -37,7 +38,7 @@ def test_mrr_at_k():
 
 def test_ir_metrics_macro_average():
     ranked = {"q1": ["a", "x"], "q2": ["y", "b"], "q3": ["z"]}
-    relevant = {"q1": {"a"}, "q2": {"b"}}            # q3 has no labels and is not scored
+    relevant = {"q1": {"a"}, "q2": {"b"}}  # q3 has no labels and is not scored
     m = ir_metrics(ranked, relevant)
     assert set(m) == {"nDCG@10", "Recall@10", "Recall@100", "MRR@10"}
     assert m["MRR@10"] == pytest.approx((1 + 0.5) / 2)
@@ -47,5 +48,14 @@ def test_ir_metrics_macro_average():
 
 
 def test_bm25_tokenize():
-    assert bm25_tokenize("What's the P/E ratio of AAPL, 2024?") == ["what", "s", "the", "p", "e", "ratio", "of",
-                                                                     "aapl", "2024"]
+    assert bm25_tokenize("What's the P/E ratio of AAPL, 2024?") == [
+        "what",
+        "s",
+        "the",
+        "p",
+        "e",
+        "ratio",
+        "of",
+        "aapl",
+        "2024",
+    ]

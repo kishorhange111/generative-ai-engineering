@@ -13,6 +13,7 @@ Every example in `gretelai/synthetic_text_to_sql` ships a `sql_context`
 string with `CREATE TABLE ...; INSERT INTO ...;` statements, which is all we
 need to build an in-memory SQLite database per example.
 """
+
 import re
 import sqlite3
 
@@ -68,9 +69,9 @@ def run_sql(context, query):
     * repr()  -> rows of mixed types (int, float, str, None) become comparable
                  strings, so sorting never raises a TypeError.
     """
-    con = sqlite3.connect(":memory:")   # a throw-away DB: examples never interfere
+    con = sqlite3.connect(":memory:")  # a throw-away DB: examples never interfere
     try:
-        con.executescript(context)       # CREATE TABLE + INSERT statements
+        con.executescript(context)  # CREATE TABLE + INSERT statements
         rows = con.execute(query).fetchall()
         return sorted(map(repr, rows))
     except Exception:

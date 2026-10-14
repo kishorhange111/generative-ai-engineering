@@ -7,6 +7,7 @@ For a guardrail the two numbers that matter most are
     false-positive rate - share of *benign* prompts that are wrongly blocked
                           (a high FPR makes the product unusable).
 """
+
 import numpy as np
 
 
@@ -26,6 +27,11 @@ def binary_scores(y, p, thr=0.5):
     y, p = np.array(y), np.array(p)
     pred = (p >= thr).astype(int)
     benign = y == 0
-    return {"precision": precision_score(y, pred, zero_division=0), "recall": recall_score(y, pred, zero_division=0),
-            "f1": f1_score(y, pred, zero_division=0), "roc_auc": roc_auc_score(y, p) if len(set(y)) > 1 else None,
-            "false_positive_rate": float(pred[benign].mean()) if benign.any() else None, "n": int(len(y))}
+    return {
+        "precision": precision_score(y, pred, zero_division=0),
+        "recall": recall_score(y, pred, zero_division=0),
+        "f1": f1_score(y, pred, zero_division=0),
+        "roc_auc": roc_auc_score(y, p) if len(set(y)) > 1 else None,
+        "false_positive_rate": float(pred[benign].mean()) if benign.any() else None,
+        "n": int(len(y)),
+    }

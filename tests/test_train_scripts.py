@@ -5,6 +5,7 @@
 * scripts whose top-level imports are installed are actually imported, which checks
   that their `common.*` imports resolve and that module-level configuration parses.
 """
+
 import ast
 import importlib.util
 import pathlib

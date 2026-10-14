@@ -30,6 +30,7 @@ The reward functions and answer parsers live in `common/reasoning.py` and are
 unit-tested in `tests/test_reasoning.py` - in RL, a bug in the reward is a bug
 in what the model learns.
 """
+
 import json
 import os
 import sys
@@ -48,22 +49,22 @@ from common.reasoning import (
     to_prompt,
 )
 
-QUICK = os.environ.get("QUICK") == "1"                    # 4-step smoke test
+QUICK = os.environ.get("QUICK") == "1"  # 4-step smoke test
 MODEL = os.environ.get("MODEL", "Qwen/Qwen2.5-1.5B-Instruct")
 OUT = os.environ.get("OUT", "/content/grpo_gsm8k")
 N_TEST = 64 if QUICK else int(os.environ.get("N_TEST", "500"))
 MAX_STEPS = 4 if QUICK else int(os.environ.get("MAX_STEPS", "400"))
-TIME_BUDGET_HOURS = float(os.environ.get("TIME_BUDGET_HOURS", "1.2"))   # whichever comes first: steps or time
+TIME_BUDGET_HOURS = float(os.environ.get("TIME_BUDGET_HOURS", "1.2"))  # whichever comes first: steps or time
 
 
-@torch.no_grad()   # inference only
+@torch.no_grad()  # inference only
 def evaluate(model, tok, test, label):
     """Greedy-decode every test question and report accuracy and format compliance.
 
     Returns (metrics, samples) where samples are 6 example outputs for the README.
     """
     model.eval()
-    tok.padding_side = "left"   # left padding for batched generation with a decoder-only model
+    tok.padding_side = "left"  # left padding for batched generation with a decoder-only model
     correct = formatted = 0
     samples, t = [], time.time()
     for i in range(0, len(test), 32):
@@ -72,16 +73,25 @@ def evaluate(model, tok, test, label):
         enc = tok(texts, return_tensors="pt", padding=True, add_special_tokens=False).to(model.device)
         # 512 new tokens leaves room for a full chain of thought.
         out = model.generate(**enc, max_new_tokens=512, do_sample=False, pad_token_id=tok.pad_token_id)
-        for ex, g in zip(batch, out[:, enc["input_ids"].shape[1]:]):   # keep only the generated part
+        for ex, g in zip(batch, out[:, enc["input_ids"].shape[1] :]):  # keep only the generated part
             text = tok.decode(g, skip_special_tokens=True)
             ok = same_number(extract_answer(text), ex["answer"])
             correct += ok
             formatted += is_well_formatted(text)
             if len(samples) < 6:
-                samples.append({"question": ex["prompt"][1]["content"], "gold": ex["answer"],
-                                "output": text[-700:], "correct": bool(ok)})
-    res = {"accuracy": correct / len(test), "format_compliance": formatted / len(test),
-           "eval_minutes": (time.time() - t) / 60}
+                samples.append(
+                    {
+                        "question": ex["prompt"][1]["content"],
+                        "gold": ex["answer"],
+                        "output": text[-700:],
+                        "correct": bool(ok),
+                    }
+                )
+    res = {
+        "accuracy": correct / len(test),
+        "format_compliance": formatted / len(test),
+        "eval_minutes": (time.time() - t) / 60,
+    }
     print(label, res, flush=True)
     return res, samples
 
@@ -102,7 +112,7 @@ def main():
     # sdpa = PyTorch's fused scaled-dot-product attention (FlashAttention-style kernels).
     model = AutoModelForCausalLM.from_pretrained(MODEL, dtype=torch.bfloat16, attn_implementation="sdpa").to("cuda")
     base_res, base_samples = evaluate(model, tok, test, "before RL")
-    tok.padding_side = "left"   # GRPO also generates, so keep left padding
+    tok.padding_side = "left"  # GRPO also generates, so keep left padding
 
     class TimeBudget(TrainerCallback):
         """Stop training once TIME_BUDGET_HOURS of wall-clock time are used."""
@@ -119,23 +129,50 @@ def main():
 
     args = GRPOConfig(
         # RL fine-tuning uses a tiny LR: large policy updates quickly collapse generation quality.
-        output_dir=OUT, max_steps=MAX_STEPS, learning_rate=2e-6, lr_scheduler_type="constant_with_warmup",
-        warmup_steps=0.03, per_device_train_batch_size=16, gradient_accumulation_steps=2,
-        num_generations=8,                 # G: answers sampled per question (16 x 2 / 8 = 4 questions per step)
+        output_dir=OUT,
+        max_steps=MAX_STEPS,
+        learning_rate=2e-6,
+        lr_scheduler_type="constant_with_warmup",
+        warmup_steps=0.03,
+        per_device_train_batch_size=16,
+        gradient_accumulation_steps=2,
+        num_generations=8,  # G: answers sampled per question (16 x 2 / 8 = 4 questions per step)
         # temperature 0.9: enough diversity inside a group for rewards (and advantages) to differ.
-        max_completion_length=384, temperature=0.9, beta=0.04,   # KL penalty to the starting model
-        bf16=True, gradient_checkpointing=True, logging_steps=5, save_strategy="no", report_to="none", seed=42)
+        max_completion_length=384,
+        temperature=0.9,
+        beta=0.04,  # KL penalty to the starting model
+        bf16=True,
+        gradient_checkpointing=True,
+        logging_steps=5,
+        save_strategy="no",
+        report_to="none",
+        seed=42,
+    )
     # Rewards are summed: max 1.5 per completion (correct + well formatted).
-    trainer = GRPOTrainer(model=model, processing_class=tok, reward_funcs=[correctness_reward, format_reward],
-                          args=args, train_dataset=train, callbacks=[TimeBudget()])
+    trainer = GRPOTrainer(
+        model=model,
+        processing_class=tok,
+        reward_funcs=[correctness_reward, format_reward],
+        args=args,
+        train_dataset=train,
+        callbacks=[TimeBudget()],
+    )
     t = time.time()
     trainer.train()
     train_min = (time.time() - t) / 60
 
     tuned_res, tuned_samples = evaluate(trainer.model, tok, test, "after GRPO")
-    summary = {"model": MODEL, "steps": trainer.state.global_step, "questions_seen": trainer.state.global_step * 4,
-               "group_size": 8, "train_minutes": train_min, "gpu": torch.cuda.get_device_name(0),
-               "test_questions": len(test), "before": base_res, "after": tuned_res}
+    summary = {
+        "model": MODEL,
+        "steps": trainer.state.global_step,
+        "questions_seen": trainer.state.global_step * 4,
+        "group_size": 8,
+        "train_minutes": train_min,
+        "gpu": torch.cuda.get_device_name(0),
+        "test_questions": len(test),
+        "before": base_res,
+        "after": tuned_res,
+    }
     json.dump(summary, open(os.path.join(OUT, "metrics.json"), "w"), indent=2)
     json.dump({"before": base_samples, "after": tuned_samples}, open(os.path.join(OUT, "samples.json"), "w"), indent=2)
     json.dump(trainer.state.log_history, open(os.path.join(OUT, "log_history.json"), "w"))

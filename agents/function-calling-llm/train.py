@@ -26,6 +26,7 @@ METRICS on held-out conversations (same prompt before/after):
 The data parser, call parser and metrics live in `common/function_calling.py`
 and are unit-tested in `tests/test_function_calling.py`.
 """
+
 import json
 import os
 import sys
@@ -40,30 +41,32 @@ from common.function_calling import fc_messages as messages  # messages(ex, with
 from common.function_calling import parse_glaive_example as parse
 from common.lm_data import masked_labels, pad_batch
 
-QUICK = os.environ.get("QUICK") == "1"                    # tiny smoke test
+QUICK = os.environ.get("QUICK") == "1"  # tiny smoke test
 MODEL = os.environ.get("MODEL", "Qwen/Qwen2.5-1.5B-Instruct")
 OUT = os.environ.get("OUT", "/content/function_calling")
 N_TRAIN = 300 if QUICK else int(os.environ.get("N_TRAIN", "15000"))
 N_TEST = 60 if QUICK else int(os.environ.get("N_TEST", "600"))
-MAX_LEN = 1024                                            # tool schemas make prompts long
+MAX_LEN = 1024  # tool schemas make prompts long
 TIME_BUDGET_HOURS = float(os.environ.get("TIME_BUDGET_HOURS", "0.8"))
 
 
-@torch.no_grad()   # inference only
+@torch.no_grad()  # inference only
 def evaluate(model, tok, test, label):
     """Greedy-generate a reply for every test conversation and compute the agent metrics.
 
     Returns (metrics, samples) - see `common.function_calling.call_metrics` for the metric definitions.
     """
     model.eval()
-    tok.padding_side = "left"   # batched generation with a decoder-only model needs left padding
+    tok.padding_side = "left"  # batched generation with a decoder-only model needs left padding
     outputs, samples, t = [], [], time.time()
     for i in range(0, len(test), 16):
         batch = test.select(range(i, min(i + 16, len(test))))
-        texts = [tok.apply_chat_template(messages(ex, False), add_generation_prompt=True, tokenize=False) for ex in batch]
+        texts = [
+            tok.apply_chat_template(messages(ex, False), add_generation_prompt=True, tokenize=False) for ex in batch
+        ]
         enc = tok(texts, return_tensors="pt", padding=True, add_special_tokens=False).to(model.device)
         out = model.generate(**enc, max_new_tokens=200, do_sample=False, pad_token_id=tok.pad_token_id)
-        for ex, g in zip(batch, out[:, enc["input_ids"].shape[1]:]):   # keep only the generated tokens
+        for ex, g in zip(batch, out[:, enc["input_ids"].shape[1] :]):  # keep only the generated tokens
             text = tok.decode(g, skip_special_tokens=True)
             outputs.append(text)
             if len(samples) < 10:
@@ -95,9 +98,16 @@ def main():
     base_res, base_samples = evaluate(model, tok, test, "zero-shot")
 
     # LoRA adapters on every attention and MLP projection; the base weights stay frozen.
-    model = get_peft_model(model, LoraConfig(r=16, lora_alpha=32, lora_dropout=0.05, task_type="CAUSAL_LM",
-                                             target_modules=["q_proj", "k_proj", "v_proj", "o_proj",
-                                                             "gate_proj", "up_proj", "down_proj"]))
+    model = get_peft_model(
+        model,
+        LoraConfig(
+            r=16,
+            lora_alpha=32,
+            lora_dropout=0.05,
+            task_type="CAUSAL_LM",
+            target_modules=["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"],
+        ),
+    )
     # Needed with gradient checkpointing + frozen embeddings: otherwise no
     # tensor entering the checkpointed blocks requires grad and LoRA gets no gradient.
     model.enable_input_require_grads()
@@ -113,7 +123,8 @@ def main():
 
     # Drop sequences whose answer was cut off entirely by MAX_LEN (all labels -100 -> nothing to learn).
     train_tok = train.map(encode, remove_columns=train.column_names).filter(
-        lambda e: any(lab != -100 for lab in e["labels"]))
+        lambda e: any(lab != -100 for lab in e["labels"])
+    )
 
     def collate(b):
         """Pad to the longest sequence in the batch and convert to tensors."""
@@ -134,22 +145,46 @@ def main():
     tok.padding_side = "right"
     # batch 4 x accumulation 4 = effective batch 16; a batch of 16 x 1024 tokens x 151k-token vocabulary
     # produced a 9 GB logits tensor and ran out of memory on a 24 GB L4.
-    args = TrainingArguments(output_dir=OUT, num_train_epochs=1, per_device_train_batch_size=4,
-                             gradient_accumulation_steps=4, learning_rate=2e-4, lr_scheduler_type="cosine",
-                             warmup_steps=0.05, bf16=True, gradient_checkpointing=True, logging_steps=20,
-                             save_strategy="no", remove_unused_columns=False, report_to="none", seed=42)
+    args = TrainingArguments(
+        output_dir=OUT,
+        num_train_epochs=1,
+        per_device_train_batch_size=4,
+        gradient_accumulation_steps=4,
+        learning_rate=2e-4,
+        lr_scheduler_type="cosine",
+        warmup_steps=0.05,
+        bf16=True,
+        gradient_checkpointing=True,
+        logging_steps=20,
+        save_strategy="no",
+        remove_unused_columns=False,
+        report_to="none",
+        seed=42,
+    )
     trainer = Trainer(model=model, args=args, train_dataset=train_tok, data_collator=collate, callbacks=[TimeBudget()])
     t = time.time()
     result = trainer.train()
     train_min = (time.time() - t) / 60
 
     tuned_res, tuned_samples = evaluate(model, tok, test, "LoRA fine-tuned")
-    summary = {"model": MODEL, "train_examples": len(train_tok), "trainable_params": trainable, "total_params": total,
-               "train_minutes": train_min, "final_train_loss": result.training_loss,
-               "gpu": torch.cuda.get_device_name(0), "zero_shot": base_res, "fine_tuned": tuned_res}
+    summary = {
+        "model": MODEL,
+        "train_examples": len(train_tok),
+        "trainable_params": trainable,
+        "total_params": total,
+        "train_minutes": train_min,
+        "final_train_loss": result.training_loss,
+        "gpu": torch.cuda.get_device_name(0),
+        "zero_shot": base_res,
+        "fine_tuned": tuned_res,
+    }
     json.dump(summary, open(os.path.join(OUT, "metrics.json"), "w"), indent=2)
-    json.dump({"zero_shot": base_samples, "fine_tuned": tuned_samples}, open(os.path.join(OUT, "samples.json"), "w"),
-              indent=2, ensure_ascii=False)
+    json.dump(
+        {"zero_shot": base_samples, "fine_tuned": tuned_samples},
+        open(os.path.join(OUT, "samples.json"), "w"),
+        indent=2,
+        ensure_ascii=False,
+    )
     json.dump(trainer.state.log_history, open(os.path.join(OUT, "log_history.json"), "w"))
     print(json.dumps(summary, indent=2))
     print("DONE")

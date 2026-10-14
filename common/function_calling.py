@@ -13,12 +13,15 @@ or answer in plain text when no tool applies. This module contains:
 * `parse_call`           - parses a model output back into a JSON call.
 * `call_metrics`         - the four agent metrics reported in the README.
 """
+
 import json
 import re
 
 # Appended to every system prompt: tells the model the exact output contract.
-INSTRUCTION = ("If one of the functions is needed, reply ONLY with <functioncall>{\"name\": ..., \"arguments\": {...}}"
-               "</functioncall>. Otherwise answer the user directly.")
+INSTRUCTION = (
+    'If one of the functions is needed, reply ONLY with <functioncall>{"name": ..., "arguments": {...}}'
+    "</functioncall>. Otherwise answer the user directly."
+)
 
 # Grab the JSON object after <functioncall>. The closing tag is optional
 # (generation may stop right after the "}"), and "\{.*\}" is greedy so nested
@@ -60,7 +63,7 @@ def parse_glaive_example(ex):
             return dict(_EMPTY)
         target = f"<functioncall>{call}</functioncall>"
     else:
-        target = reply   # no tool needed: the target is the plain-text answer
+        target = reply  # no tool needed: the target is the plain-text answer
     return {"ok": bool(user and target), "system": system, "user": user, "target": target, "call": call}
 
 
@@ -121,6 +124,11 @@ def call_metrics(outputs, gold_calls):
                 exact += pred.get("arguments") == gold["arguments"]
     n = len(outputs)
     # max(..., 1) avoids a division by zero on tiny smoke-test sets.
-    return {"call_decision_accuracy": decision / n, "tool_name_accuracy": name_ok / max(n_call, 1),
-            "full_call_exact_match": exact / max(n_call, 1), "valid_json_rate": valid / max(attempted, 1),
-            "test_examples": n, "examples_needing_a_call": n_call}
+    return {
+        "call_decision_accuracy": decision / n,
+        "tool_name_accuracy": name_ok / max(n_call, 1),
+        "full_call_exact_match": exact / max(n_call, 1),
+        "valid_json_rate": valid / max(attempted, 1),
+        "test_examples": n,
+        "examples_needing_a_call": n_call,
+    }

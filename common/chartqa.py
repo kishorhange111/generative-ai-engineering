@@ -19,8 +19,7 @@ def chart_messages(ex, with_answer):
     appended as the assistant turn (training); otherwise the prompt ends with
     the user turn (generation).
     """
-    msgs = [{"role": "user", "content": [{"type": "image"},
-                                         {"type": "text", "text": f"{ex['query']}\n{INSTRUCTION}"}]}]
+    msgs = [{"role": "user", "content": [{"type": "image"}, {"type": "text", "text": f"{ex['query']}\n{INSTRUCTION}"}]}]
     if with_answer:
         msgs.append({"role": "assistant", "content": [{"type": "text", "text": str(ex["label"][0])}]})
     return msgs

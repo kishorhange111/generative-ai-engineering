@@ -11,6 +11,7 @@ computed by code, not by a learned reward model or a human:
 Because these functions decide what the model is pushed towards, they are the
 most important code in an RL pipeline - and the easiest to unit-test.
 """
+
 import re
 
 # The system prompt asks for a visible chain of thought followed by a short,
@@ -91,5 +92,7 @@ def format_reward(prompts, completions, **kw):
 
 def to_prompt(ex):
     """Map a raw GSM8K row to the {"prompt", "answer"} format used for training and evaluation."""
-    return {"prompt": [{"role": "system", "content": SYSTEM_PROMPT}, {"role": "user", "content": ex["question"]}],
-            "answer": gold_answer(ex["answer"])}
+    return {
+        "prompt": [{"role": "system", "content": SYSTEM_PROMPT}, {"role": "user", "content": ex["question"]}],
+        "answer": gold_answer(ex["answer"]),
+    }

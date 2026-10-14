@@ -1,4 +1,5 @@
 """Tests for the text-to-SQL prompt, SQL clean-up and execution-based matching."""
+
 from common.sql import (
     SYSTEM_PROMPT,
     clean_sql,
@@ -30,7 +31,7 @@ def test_sql_messages_without_answer_ends_with_user_turn():
     msgs = sql_messages("How many?", CTX)
     assert [m["role"] for m in msgs] == ["system", "user"]
     assert msgs[0]["content"] == SYSTEM_PROMPT
-    assert "INSERT" not in msgs[1]["content"]          # data rows are never shown to the model
+    assert "INSERT" not in msgs[1]["content"]  # data rows are never shown to the model
     assert msgs[1]["content"].endswith("Question: How many?")
 
 

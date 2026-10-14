@@ -31,6 +31,7 @@ and is evaluated on the same test set - only the labels differ.
 
 Pure helpers (prompt, SQL clean-up, execution matching) live in `common/sql.py`.
 """
+
 import json
 import os
 import sys
@@ -44,30 +45,30 @@ from common.lm_data import masked_labels, pad_batch
 from common.sql import clean_sql, execution_accuracy, run_sql
 from common.sql import sql_messages as messages  # messages(question, context, answer=None)
 
-QUICK = os.environ.get("QUICK") == "1"                    # tiny smoke test
+QUICK = os.environ.get("QUICK") == "1"  # tiny smoke test
 TEACHER = "Qwen/Qwen2.5-7B-Instruct"
 STUDENT = "Qwen/Qwen2.5-0.5B-Instruct"
 OUT = os.environ.get("OUT", "/content/sql_distill")
-N_TRAIN = 300 if QUICK else int(os.environ.get("N_TRAIN", "6000"))   # teacher labelling is the expensive step
+N_TRAIN = 300 if QUICK else int(os.environ.get("N_TRAIN", "6000"))  # teacher labelling is the expensive step
 N_TEST = 40 if QUICK else 500
 
 
-@torch.no_grad()   # inference only
+@torch.no_grad()  # inference only
 def generate(model, tok, rows, bs=48, max_new=200):
     """Greedy-generate one SQL query per (question, context) pair in `rows`.
 
     Returns (cleaned_sql_list, {"seconds", "tokens_per_second"}) - the speed
     numbers are what makes the teacher-vs-student cost comparison concrete.
     """
-    tok.padding_side = "left"   # batched generation with a decoder-only model needs left padding
+    tok.padding_side = "left"  # batched generation with a decoder-only model needs left padding
     outs, t, n_tok = [], time.time(), 0
     for i in range(0, len(rows), bs):
-        b = rows[i:i + bs]
+        b = rows[i : i + bs]
         texts = [tok.apply_chat_template(messages(q, c), add_generation_prompt=True, tokenize=False) for q, c in b]
         enc = tok(texts, return_tensors="pt", padding=True, add_special_tokens=False).to("cuda")
         g = model.generate(**enc, max_new_tokens=max_new, do_sample=False, pad_token_id=tok.pad_token_id)
-        new = g[:, enc["input_ids"].shape[1]:]            # drop the prompt, keep generated tokens
-        n_tok += int((new != tok.pad_token_id).sum())      # count real tokens (not padding after EOS)
+        new = g[:, enc["input_ids"].shape[1] :]  # drop the prompt, keep generated tokens
+        n_tok += int((new != tok.pad_token_id).sum())  # count real tokens (not padding after EOS)
         outs += [clean_sql(tok.decode(x, skip_special_tokens=True)) for x in new]
     secs = time.time() - t
     return outs, {"seconds": secs, "tokens_per_second": n_tok / secs}
@@ -106,9 +107,20 @@ def finetune(name, pairs):
 
     tok.padding_side = "right"
     # Full fine-tuning (all 0.5B weights) -> a small LR (2e-5) to avoid destroying pretrained knowledge.
-    args = TrainingArguments(output_dir=f"{OUT}/{name}", num_train_epochs=1, per_device_train_batch_size=16,
-                             learning_rate=2e-5, lr_scheduler_type="cosine", warmup_steps=0.05, bf16=True,
-                             logging_steps=50, save_strategy="no", remove_unused_columns=False, report_to="none", seed=42)
+    args = TrainingArguments(
+        output_dir=f"{OUT}/{name}",
+        num_train_epochs=1,
+        per_device_train_batch_size=16,
+        learning_rate=2e-5,
+        lr_scheduler_type="cosine",
+        warmup_steps=0.05,
+        bf16=True,
+        logging_steps=50,
+        save_strategy="no",
+        remove_unused_columns=False,
+        report_to="none",
+        seed=42,
+    )
     t = time.time()
     Trainer(model=model, args=args, train_dataset=ds, data_collator=collate).train()
     return model, tok, (time.time() - t) / 60
@@ -124,7 +136,9 @@ def main():
     train = raw["train"].shuffle(seed=42).select(range(N_TRAIN))
     test = raw["test"].shuffle(seed=42).select(range(N_TEST * 3))
     # Keep only test questions whose gold SQL executes and returns rows (a meaningful comparison).
-    test_rows = [(e["sql_prompt"], e["sql_context"], e["sql"]) for e in test if run_sql(e["sql_context"], e["sql"])][:N_TEST]
+    test_rows = [(e["sql_prompt"], e["sql_context"], e["sql"]) for e in test if run_sql(e["sql_context"], e["sql"])][
+        :N_TEST
+    ]
     train_rows = [(e["sql_prompt"], e["sql_context"], e["sql"]) for e in train]
     res = {}
 
@@ -137,7 +151,7 @@ def main():
     # The teacher writes SQL for every TRAINING question; the gold SQL is never shown to it.
     t_train, _ = generate(teacher, ttok, [(q, c) for q, c, _ in train_rows], bs=64)
     label_min = (time.time() - t) / 60
-    del teacher                                  # free ~15 GB before loading students
+    del teacher  # free ~15 GB before loading students
     torch.cuda.empty_cache()
     # Automatic, label-free quality filter: does the teacher's SQL at least run?
     executes = [run_sql(c, a) is not None for (q, c, _), a in zip(train_rows, t_train)]
@@ -153,21 +167,33 @@ def main():
     # Same questions in every arm; only the source of the target SQL differs.
     arms = {
         "student_distilled_teacher_sql": [(q, c, a) for (q, c, _), a in zip(train_rows, t_train)],
-        "student_distilled_executable_only": [(q, c, a) for (q, c, _), a, ok in zip(train_rows, t_train, executes) if ok],
+        "student_distilled_executable_only": [
+            (q, c, a) for (q, c, _), a, ok in zip(train_rows, t_train, executes) if ok
+        ],
         "student_trained_on_gold_sql": train_rows,
     }
     for name, pairs in arms.items():
         model, tok, minutes = finetune(name, pairs)
         preds, speed = generate(model, tok, [(q, c) for q, c, _ in test_rows])
-        res[name] = {"execution_accuracy": exec_accuracy(preds, test_rows), "train_examples": len(pairs),
-                     "train_minutes": minutes, **speed}
+        res[name] = {
+            "execution_accuracy": exec_accuracy(preds, test_rows),
+            "train_examples": len(pairs),
+            "train_minutes": minutes,
+            **speed,
+        }
         print(name, res[name], flush=True)
         del model
         torch.cuda.empty_cache()
 
-    summary = {"teacher": TEACHER, "student": STUDENT, "test_questions": len(test_rows),
-               "teacher_labelling_minutes": label_min, "teacher_labels_executable": sum(executes) / len(executes),
-               "gpu": torch.cuda.get_device_name(0), "results": res}
+    summary = {
+        "teacher": TEACHER,
+        "student": STUDENT,
+        "test_questions": len(test_rows),
+        "teacher_labelling_minutes": label_min,
+        "teacher_labels_executable": sum(executes) / len(executes),
+        "gpu": torch.cuda.get_device_name(0),
+        "results": res,
+    }
     json.dump(summary, open(os.path.join(OUT, "metrics.json"), "w"), indent=2)
     print(json.dumps(summary, indent=2))
     print("DONE")

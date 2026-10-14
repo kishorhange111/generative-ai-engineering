@@ -32,7 +32,7 @@ def masked_labels(prompt_ids, full_ids):
     >>> masked_labels([1, 2], [1, 2, 3, 4])
     [-100, -100, 3, 4]
     """
-    return ([IGNORE_INDEX] * len(prompt_ids) + list(full_ids[len(prompt_ids):]))[:len(full_ids)]
+    return ([IGNORE_INDEX] * len(prompt_ids) + list(full_ids[len(prompt_ids) :]))[: len(full_ids)]
 
 
 def pad_batch(batch, pad_token_id):

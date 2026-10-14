@@ -15,6 +15,7 @@ All relevance labels are binary here (relevant / not relevant).
 
 Each metric is averaged over questions (macro average), as in BEIR / MTEB.
 """
+
 import re
 
 import numpy as np
@@ -54,8 +55,12 @@ def ir_metrics(ranked, relevant):
         r10.append(recall_at_k(docs, rel, 10))
         r100.append(recall_at_k(docs, rel, 100))
         mrr.append(mrr_at_k(docs, rel, 10))
-    return {"nDCG@10": float(np.mean(ndcg)), "Recall@10": float(np.mean(r10)),
-            "Recall@100": float(np.mean(r100)), "MRR@10": float(np.mean(mrr))}
+    return {
+        "nDCG@10": float(np.mean(ndcg)),
+        "Recall@10": float(np.mean(r10)),
+        "Recall@100": float(np.mean(r100)),
+        "MRR@10": float(np.mean(mrr)),
+    }
 
 
 def bm25_tokenize(text):
