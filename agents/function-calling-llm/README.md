@@ -32,3 +32,15 @@ Agent frameworks (LangChain / LangGraph / CrewAI tools, OpenAI-style function ca
 pip install torch transformers datasets peft
 python agents/function-calling-llm/train.py        # ~65 min on an L4 incl. evaluations
 ```
+
+## Run on Colab
+Trained on **Google Colab Pro** with an **NVIDIA L4 (24 GB)** runtime (*Runtime → Change runtime type → L4 GPU*). In a notebook cell:
+
+```python
+!git clone https://github.com/kishorhange111/generative-ai-engineering.git
+%cd generative-ai-engineering
+!pip install -q -r requirements.txt
+!QUICK=1 python agents/function-calling-llm/train.py   # smoke test on a tiny subset
+!python agents/function-calling-llm/train.py           # full run (time-budgeted)
+```
+Outputs (`metrics.json`, samples, logs) are written to `$OUT` (default `/content/function_calling`); copy them to Google Drive before the runtime is recycled.

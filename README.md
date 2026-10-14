@@ -1,5 +1,7 @@
 # Generative AI Engineering
 
+[![CI](https://github.com/kishorhange111/generative-ai-engineering/actions/workflows/ci.yml/badge.svg)](https://github.com/kishorhange111/generative-ai-engineering/actions/workflows/ci.yml)
+
 Hands-on projects covering the core skills of building production LLM systems — **fine-tuning (LoRA / QLoRA / distillation), reinforcement learning, RAG, agents, multimodal models and LLM safety**. Every project is trained on cloud GPUs and evaluated with a task-appropriate metric against a measured baseline, with failures analysed rather than hidden.
 
 ## Fine-tuning
@@ -41,6 +43,28 @@ Hands-on projects covering the core skills of building production LLM systems �
 - **Cost-aware:** hard time budgets per run; LoRA/QLoRA so a single GPU is enough.
 
 ## Layout
-Each project folder contains a self-contained, heavily commented `train.py`, a `README.md` (approach, results, discussion) and `results/` with the raw metrics and samples. Trained on Google Colab GPUs (NVIDIA A100 / L4) with PyTorch and Hugging Face `transformers`, `peft`, `trl`, `datasets`.
+```
+<area>/<project>/   train.py · README.md · results/
+common/             pure, unit-tested helpers: SQL execution matching, GRPO rewards, tool-call parsing,
+                    IR metrics (nDCG / Recall / MRR), ChartQA relaxed accuracy, WER / CER, guardrail metrics
+tests/              pytest suite for common/ + import / docstring checks for every train.py (CPU only)
+```
+Each project folder contains a heavily commented `train.py` (shared pure helpers live in `common/`), a `README.md` (approach, results, discussion) and `results/` with the raw metrics and samples. Trained on Google Colab GPUs (NVIDIA A100 / L4) with PyTorch and Hugging Face `transformers`, `peft`, `trl`, `datasets`.
+
+## Running
+```bash
+pip install -r requirements.txt                       # GPU runtime (e.g. Colab Pro A100 / L4)
+QUICK=1 python fine-tuning/qlora-text-to-sql/train.py # every script has a QUICK=1 smoke-test mode
+```
+Each project README has a **Run on Colab** section with the exact GPU type and commands used.
+
+## Development
+```bash
+pip install torch --index-url https://download.pytorch.org/whl/cpu
+pip install -r requirements-dev.txt
+ruff check .        # lint
+pytest              # unit tests, CPU only, no downloads
+```
+CI (GitHub Actions) runs `ruff check`, byte-compiles every `train.py` and runs the test suite on every push.
 
 Related: [**mini-chatgpt**](https://github.com/kishorhange111/mini-chatgpt) — base LLM → SFT → DPO → benchmarks · [**deep-learning-portfolio**](https://github.com/kishorhange111/deep-learning-portfolio) — computer vision, NLP and generative models.

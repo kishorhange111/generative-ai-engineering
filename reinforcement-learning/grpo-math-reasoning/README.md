@@ -31,3 +31,15 @@ For every question the model samples a **group of 8 answers**. Each gets a rule-
 pip install torch transformers datasets trl
 python reinforcement-learning/grpo-math-reasoning/train.py      # ~80 min on an A100 (time-budgeted)
 ```
+
+## Run on Colab
+Trained on **Google Colab Pro** with an **NVIDIA A100 40 GB** runtime (*Runtime → Change runtime type → A100 GPU*). In a notebook cell:
+
+```python
+!git clone https://github.com/kishorhange111/generative-ai-engineering.git
+%cd generative-ai-engineering
+!pip install -q -r requirements.txt
+!QUICK=1 python reinforcement-learning/grpo-math-reasoning/train.py   # smoke test on a tiny subset
+!python reinforcement-learning/grpo-math-reasoning/train.py           # full run (time-budgeted)
+```
+Outputs (`metrics.json`, samples, logs) are written to `$OUT` (default `/content/grpo_gsm8k`); copy them to Google Drive before the runtime is recycled.

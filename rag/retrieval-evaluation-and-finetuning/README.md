@@ -37,3 +37,15 @@ pip install torch sentence-transformers datasets faiss-cpu rank-bm25
 python rag/retrieval-evaluation-and-finetuning/train.py          # ~15 min on an A100 (encoding 57k passages twice + reranking)
 QUICK=1 python rag/retrieval-evaluation-and-finetuning/train.py  # small smoke test
 ```
+
+## Run on Colab
+Trained on **Google Colab Pro** with an **NVIDIA A100 40 GB** runtime (*Runtime → Change runtime type → A100 GPU*). In a notebook cell:
+
+```python
+!git clone https://github.com/kishorhange111/generative-ai-engineering.git
+%cd generative-ai-engineering
+!pip install -q -r requirements.txt
+!QUICK=1 python rag/retrieval-evaluation-and-finetuning/train.py   # smoke test on a tiny subset
+!python rag/retrieval-evaluation-and-finetuning/train.py           # full run (time-budgeted)
+```
+Outputs (`metrics.json`, `results.md`, the comparison plot) are written to the project's `results/` folder, or to `$OUT` if set.

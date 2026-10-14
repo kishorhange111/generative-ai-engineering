@@ -47,3 +47,15 @@ python fine-tuning/qlora-text-to-sql/train.py                                   
 MODEL=Qwen/Qwen2.5-3B-Instruct python fine-tuning/qlora-text-to-sql/train.py    # smaller GPUs
 QUICK=1 python fine-tuning/qlora-text-to-sql/train.py                           # smoke test
 ```
+
+## Run on Colab
+Trained on **Google Colab Pro** with an **NVIDIA A100 40 GB** runtime (*Runtime → Change runtime type → A100 GPU*). In a notebook cell:
+
+```python
+!git clone https://github.com/kishorhange111/generative-ai-engineering.git
+%cd generative-ai-engineering
+!pip install -q -r requirements.txt
+!QUICK=1 python fine-tuning/qlora-text-to-sql/train.py   # smoke test on a tiny subset
+!python fine-tuning/qlora-text-to-sql/train.py           # full run (time-budgeted)
+```
+Outputs (`metrics.json`, samples, logs) are written to `$OUT` (default `/content/qlora_sql`); copy them to Google Drive before the runtime is recycled.
