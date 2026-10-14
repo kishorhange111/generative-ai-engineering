@@ -27,7 +27,7 @@ Latency: FAISS search **0.11 ms/query**; cross-encoder reranking of 50 candidate
 ## What the numbers say
 1. **Dense retrieval nearly doubles quality over BM25** (+86 % nDCG@10). Financial questions and forum answers share meaning far more often than exact words.
 2. **Fine-tuning raised deep recall (+2.4 pts Recall@100) but slightly lowered top-10 ranking.** 14k noisy forum pairs, 3 epochs and only in-batch *random* negatives taught the model to find more of the relevant passages but not to rank them better — and some general-purpose ranking ability was traded away. Fixes: mined **hard negatives** (BM25/dense top-k non-relevant passages), fewer epochs or a lower LR, or mixing general-domain pairs in to prevent forgetting.
-3. **The reranker made things worse** (−0.038 nDCG@10) *and* costs ~2,700× more latency than the vector search. This is consistent with the BEIR benchmark, where MS-MARCO-trained cross-encoders under-perform strong dense retrievers on FiQA: web-search relevance ≠ financial-opinion relevance. A reranker is only worth it once it has been validated — or fine-tuned — on the target domain.
+3. **The reranker made things worse here** (−0.038 nDCG@10) *and* costs ~2,700× more latency than the vector search. Treat this as a finding about *this* setup, not a general rule: rerankers usually help on BEIR-style tasks, including FiQA, so a result like this needs checking before anyone acts on it. What was checked: the code scores (question, passage) pairs, truncates at 512 tokens, and leaves candidates beyond the top 50 in place (Recall@100 is unchanged, as expected). Likely causes: bge-reranker-base was trained mostly on web-search relevance, FiQA's "relevant" answers are long forum posts that get truncated, and FiQA labels are sparse, so a reranker that promotes an unlabelled but good answer is scored as wrong. The next experiments would be reranking the off-the-shelf retriever's list too, and trying a stronger reranker (bge-reranker-v2-m3).
 
 **Takeaway:** every stage of a RAG pipeline must earn its place with measurements on in-domain labelled data. Adding a fine-tuned retriever and a reranker "because best practice says so" would have made this system slower *and* worse at the top of the ranking.
 
@@ -37,3 +37,15 @@ pip install torch sentence-transformers datasets faiss-cpu rank-bm25
 python rag/retrieval-evaluation-and-finetuning/train.py          # ~15 min on an A100 (encoding 57k passages twice + reranking)
 QUICK=1 python rag/retrieval-evaluation-and-finetuning/train.py  # small smoke test
 ```
+
+## Run on Colab
+Trained on **Google Colab Pro** with an **NVIDIA A100 40 GB** runtime (*Runtime → Change runtime type → A100 GPU*). In a notebook cell:
+
+```python
+!git clone https://github.com/kishorhange111/generative-ai-engineering.git
+%cd generative-ai-engineering
+!pip install -q -r requirements.txt
+!QUICK=1 OUT=/content/smoke python rag/retrieval-evaluation-and-finetuning/train.py   # smoke test (keeps results/ intact)
+!python rag/retrieval-evaluation-and-finetuning/train.py           # full run (time-budgeted)
+```
+Outputs (`metrics.json`, `results.md`, the comparison plot) are written to the project's `results/` folder, or to `$OUT` if set.

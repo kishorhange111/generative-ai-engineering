@@ -24,42 +24,56 @@ PIPELINE STAGES COMPARED (same 648 test questions for every stage):
                          for 57k passages, very accurate for 50: the standard
                          "retrieve fast, then rerank" production design.
 
-METRICS (standard IR metrics, computed from scratch below):
+METRICS (standard IR metrics, computed from scratch in `common/retrieval.py`
+and unit-tested in `tests/test_retrieval.py`):
     nDCG@10   - ranking quality of the top 10, rewards relevant hits near the top
     Recall@10 / Recall@100 - share of relevant passages found in the top k
                   (Recall@k bounds what the LLM can ever see in a RAG prompt)
     MRR@10    - how high the FIRST relevant passage appears
 """
+
 import json
 import os
+import sys
 import time
 
 import numpy as np
 
-QUICK = os.environ.get("QUICK") == "1"
+# Make the repo root importable so `common/` works from any working directory.
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+from common.retrieval import bm25_tokenize, ir_metrics
+
+QUICK = os.environ.get("QUICK") == "1"  # small corpus + 50 questions smoke test
 OUT = os.environ.get("OUT", os.path.join(os.path.dirname(os.path.abspath(__file__)), "results"))
 EMBEDDER = "BAAI/bge-small-en-v1.5"
 RERANKER = "BAAI/bge-reranker-base"
-QUERY_PREFIX = "Represent this sentence for searching relevant passages: "   # bge's query instruction
+QUERY_PREFIX = "Represent this sentence for searching relevant passages: "  # bge's query instruction
 EPOCHS = 1 if QUICK else 3
-BATCH = 64
-RERANK_TOP = 50
+BATCH = 64  # also the number of in-batch negatives (+1) for the contrastive loss
+RERANK_TOP = 50  # how many first-stage candidates the cross-encoder re-scores
 
 
 # ---------------------------------------------------------------------------
 # Data
 # ---------------------------------------------------------------------------
 def load_fiqa():
+    """Load the FiQA corpus, queries and relevance labels from the MTEB mirror.
+
+    Returns doc_ids, docs (title + text), {query_id: text}, train qrels, test qrels;
+    qrels are {query_id: set(relevant doc ids)}.
+    """
     from datasets import load_dataset
 
     corpus = load_dataset("mteb/fiqa", "corpus", split="corpus")
     queries = load_dataset("mteb/fiqa", "queries", split="queries")
     qrels = load_dataset("mteb/fiqa", "default")
     doc_ids = [str(i) for i in corpus["_id"]]
+    # Prepend the title when there is one (most FiQA posts have none).
     docs = [(t + " " + x).strip() if t else x for t, x in zip(corpus["title"], corpus["text"])]
     qtext = {str(i): t for i, t in zip(queries["_id"], queries["text"])}
 
     def rel(split):
+        """Collect {query_id: set(doc_id)} for one split, keeping only positive labels."""
         r = {}
         for q, d, s in zip(qrels[split]["query-id"], qrels[split]["corpus-id"], qrels[split]["score"]):
             if s > 0:
@@ -73,59 +87,56 @@ def load_fiqa():
 # Metrics
 # ---------------------------------------------------------------------------
 def evaluate(ranked, relevant):
-    """ranked: {qid: [doc ids, best first]}, relevant: {qid: set(doc ids)}."""
-    ndcg, r10, r100, mrr = [], [], [], []
-    for q, rel in relevant.items():
-        docs = ranked[q]
-        gains = [1.0 if d in rel else 0.0 for d in docs[:10]]
-        dcg = sum(g / np.log2(i + 2) for i, g in enumerate(gains))
-        idcg = sum(1 / np.log2(i + 2) for i in range(min(len(rel), 10)))
-        ndcg.append(dcg / idcg)
-        r10.append(len(rel & set(docs[:10])) / len(rel))
-        r100.append(len(rel & set(docs[:100])) / len(rel))
-        first = next((i for i, d in enumerate(docs[:10]) if d in rel), None)
-        mrr.append(0.0 if first is None else 1 / (first + 1))
-    return {"nDCG@10": float(np.mean(ndcg)), "Recall@10": float(np.mean(r10)),
-            "Recall@100": float(np.mean(r100)), "MRR@10": float(np.mean(mrr))}
+    """ranked: {qid: [doc ids, best first]}, relevant: {qid: set(doc ids)} -> nDCG@10, Recall@10/100, MRR@10."""
+    return ir_metrics(ranked, relevant)
 
 
 # ---------------------------------------------------------------------------
 # Retrievers
 # ---------------------------------------------------------------------------
 def bm25_search(docs, doc_ids, qids, qtext, k=100):
-    import re
-
+    """Keyword baseline: rank all passages with BM25 (Okapi) and keep the top k per question."""
     from rank_bm25 import BM25Okapi
 
-    tokenize = lambda s: re.findall(r"\w+", s.lower())
-    bm25 = BM25Okapi([tokenize(d) for d in docs])
+    bm25 = BM25Okapi([bm25_tokenize(d) for d in docs])
     out = {}
     for q in qids:
-        scores = bm25.get_scores(tokenize(qtext[q]))
+        scores = bm25.get_scores(bm25_tokenize(qtext[q]))
+        # argpartition finds the k best in O(n) without sorting all 57k scores;
+        # then only those k are sorted, best first.
         top = np.argpartition(-scores, k)[:k]
         out[q] = [doc_ids[i] for i in top[np.argsort(-scores[top])]]
     return out
 
 
 def dense_search(model, docs, doc_ids, qids, qtext, k=100):
-    """Embed every passage once, build a FAISS inner-product index, search all test questions."""
+    """Embed every passage once, build a FAISS inner-product index, search all test questions.
+
+    Returns (rankings, index_build_seconds, search_ms_per_query).
+    """
     import faiss
 
     t = time.time()
+    # Passages are embedded WITHOUT the query prefix (bge is asymmetric: only queries get the instruction).
     doc_emb = model.encode(docs, batch_size=256, normalize_embeddings=True, show_progress_bar=False).astype("float32")
-    index = faiss.IndexFlatIP(doc_emb.shape[1])   # exact search; normalized vectors -> inner product = cosine
+    index = faiss.IndexFlatIP(doc_emb.shape[1])  # exact search; normalized vectors -> inner product = cosine
     index.add(doc_emb)
     index_s = time.time() - t
-    q_emb = model.encode([QUERY_PREFIX + qtext[q] for q in qids], batch_size=256, normalize_embeddings=True,
-                         show_progress_bar=False).astype("float32")
+    q_emb = model.encode(
+        [QUERY_PREFIX + qtext[q] for q in qids], batch_size=256, normalize_embeddings=True, show_progress_bar=False
+    ).astype("float32")
     t = time.time()
-    _, idx = index.search(q_emb, k)
+    _, idx = index.search(q_emb, k)  # (n_queries, k) row indices, best first
     search_ms = 1000 * (time.time() - t) / len(qids)
     return {q: [doc_ids[i] for i in row] for q, row in zip(qids, idx)}, index_s, search_ms
 
 
 def rerank(ranked, docs_by_id, qtext, top=RERANK_TOP):
-    """Cross-encoder: score (question, passage) pairs jointly, re-order the top candidates."""
+    """Cross-encoder: score (question, passage) pairs jointly, re-order the top candidates.
+
+    Candidates beyond `top` keep their first-stage order, so Recall@100 is unchanged.
+    Returns (rankings, ms_per_query).
+    """
     from sentence_transformers import CrossEncoder
 
     ce = CrossEncoder(RERANKER, max_length=512)
@@ -138,37 +149,57 @@ def rerank(ranked, docs_by_id, qtext, top=RERANK_TOP):
 
 
 def finetune(train_rel, qtext, docs_by_id):
-    """Domain-adapt the embedding model with in-batch negatives (MultipleNegativesRankingLoss)."""
+    """Domain-adapt the embedding model with in-batch negatives (MultipleNegativesRankingLoss).
+
+    Uses only the FiQA *training* questions, so the test questions stay unseen.
+    Returns (model, training_minutes, number_of_pairs).
+    """
     from datasets import Dataset
-    from sentence_transformers import (SentenceTransformer, SentenceTransformerTrainer,
-                                       SentenceTransformerTrainingArguments, losses)
+    from sentence_transformers import (
+        SentenceTransformer,
+        SentenceTransformerTrainer,
+        SentenceTransformerTrainingArguments,
+        losses,
+    )
     from sentence_transformers.training_args import BatchSamplers
 
+    # One (query, relevant passage) pair per positive label.
     pairs = [(QUERY_PREFIX + qtext[q], docs_by_id[d]) for q, ds in train_rel.items() for d in ds if d in docs_by_id]
     if QUICK:
         pairs = pairs[:2000]
     print(f"training pairs: {len(pairs)}")
     ds = Dataset.from_dict({"anchor": [p[0] for p in pairs], "positive": [p[1] for p in pairs]})
     model = SentenceTransformer(EMBEDDER)
-    model.max_seq_length = 256
+    model.max_seq_length = 256  # truncate long forum posts: faster, and the start carries most meaning
     args = SentenceTransformerTrainingArguments(
-        output_dir=os.path.expanduser("~/checkpoints/bge_fiqa"), num_train_epochs=EPOCHS,
-        per_device_train_batch_size=BATCH, learning_rate=2e-5, warmup_steps=0.1,
-        fp16=True, batch_sampler=BatchSamplers.NO_DUPLICATES,   # no duplicate passages -> no false in-batch negatives
-        logging_steps=50, save_strategy="no", report_to="none", seed=42)
-    trainer = SentenceTransformerTrainer(model=model, args=args, train_dataset=ds,
-                                         loss=losses.MultipleNegativesRankingLoss(model))
+        output_dir=os.path.expanduser("~/checkpoints/bge_fiqa"),
+        num_train_epochs=EPOCHS,
+        per_device_train_batch_size=BATCH,
+        learning_rate=2e-5,
+        warmup_steps=0.1,
+        fp16=True,
+        batch_sampler=BatchSamplers.NO_DUPLICATES,  # no duplicate passages -> no false in-batch negatives
+        logging_steps=50,
+        save_strategy="no",
+        report_to="none",
+        seed=42,
+    )
+    trainer = SentenceTransformerTrainer(
+        model=model, args=args, train_dataset=ds, loss=losses.MultipleNegativesRankingLoss(model)
+    )
     t = time.time()
     trainer.train()
     return model, (time.time() - t) / 60, len(pairs)
 
 
 def main():
+    """Run the four pipeline stages on the same test questions and write metrics.json, results.md and a plot."""
     from sentence_transformers import SentenceTransformer
 
     os.makedirs(OUT, exist_ok=True)
     doc_ids, docs, qtext, train_rel, test_rel = load_fiqa()
     if QUICK:
+        # Smoke test: 50 questions, their relevant passages + 5,000 distractors.
         test_rel = dict(list(test_rel.items())[:50])
         keep = {d for ds in test_rel.values() for d in ds} | set(doc_ids[:5000])
         sel = [i for i, d in enumerate(doc_ids) if d in keep]
@@ -178,21 +209,25 @@ def main():
     print(f"corpus {len(docs)} passages, {len(qids)} test questions, {len(train_rel)} train questions")
 
     results, notes = {}, {}
+    # 1) keyword baseline
     results["BM25"] = evaluate(bm25_search(docs, doc_ids, qids, qtext), test_rel)
     print("BM25", results["BM25"])
 
+    # 2) off-the-shelf dense retriever
     base = SentenceTransformer(EMBEDDER)
     ranked, index_s, ms = dense_search(base, docs, doc_ids, qids, qtext)
     results["bge-small (off-the-shelf)"] = evaluate(ranked, test_rel)
     notes["index_build_seconds"] = index_s
     print("dense", results["bge-small (off-the-shelf)"])
 
+    # 3) domain-adapted dense retriever
     tuned, train_min, n_pairs = finetune(train_rel, qtext, docs_by_id)
     ranked, _, ms = dense_search(tuned, docs, doc_ids, qids, qtext)
     results["bge-small fine-tuned on FiQA"] = evaluate(ranked, test_rel)
     notes.update(finetune_minutes=train_min, finetune_pairs=n_pairs, faiss_search_ms_per_query=ms)
     print("fine-tuned", results["bge-small fine-tuned on FiQA"])
 
+    # 4) rerank the fine-tuned retriever's top-50
     reranked, rerank_ms = rerank(ranked, docs_by_id, qtext)
     results["fine-tuned + bge-reranker (top-50)"] = evaluate(reranked, test_rel)
     notes["rerank_ms_per_query"] = rerank_ms
@@ -203,23 +238,31 @@ def main():
         f.write(f"FiQA-2018 test set: {len(qids)} questions over {len(docs):,} passages\n\n")
         f.write("| retriever | nDCG@10 | Recall@10 | Recall@100 | MRR@10 |\n|---|---|---|---|---|\n")
         for name, m in results.items():
-            f.write(f"| {name} | {m['nDCG@10']:.3f} | {m['Recall@10']:.3f} | {m['Recall@100']:.3f} | {m['MRR@10']:.3f} |\n")
+            f.write(
+                f"| {name} | {m['nDCG@10']:.3f} | {m['Recall@10']:.3f} | {m['Recall@100']:.3f} | {m['MRR@10']:.3f} |\n"
+            )
     plot(results)
     print(json.dumps(notes, indent=2))
     print("DONE")
 
 
 def plot(results):
+    """Grouped bar chart of nDCG@10 / Recall@10 / Recall@100 per pipeline stage."""
     import matplotlib
-    matplotlib.use("Agg")
+
+    matplotlib.use("Agg")  # no display on a cloud VM
     import matplotlib.pyplot as plt
 
     names = list(results)
     x = np.arange(len(names))
     fig, ax = plt.subplots(figsize=(9, 4))
     for i, (metric, color) in enumerate([("nDCG@10", "#2a7ab9"), ("Recall@10", "#7fb3d5"), ("Recall@100", "#bbb")]):
+        # Offset each metric's bar left / centre / right of the stage's tick.
         ax.bar(x + (i - 1) * 0.27, [results[n][metric] for n in names], 0.27, label=metric, color=color)
-    ax.set_xticks(x, [n.replace(" (", "\n(").replace(" +", "\n+").replace(" fine", "\nfine") for n in names], fontsize=8)
+    # Break long stage names over lines so the tick labels do not overlap.
+    ax.set_xticks(
+        x, [n.replace(" (", "\n(").replace(" +", "\n+").replace(" fine", "\nfine") for n in names], fontsize=8
+    )
     ax.legend()
     ax.set_title("FiQA-2018 retrieval quality by pipeline stage")
     fig.tight_layout()

@@ -47,4 +47,17 @@ More examples in [`results/samples.json`](results/samples.json).
 pip install torch transformers datasets jiwer soundfile librosa
 python multimodal/whisper-marathi-speech-recognition/train.py      # ~35 min on an L4 incl. two full test-set evaluations
 ```
+
+## Run on Colab
+Trained on **Google Colab Pro** with an **NVIDIA L4 (24 GB)** runtime (*Runtime → Change runtime type → L4 GPU*). In a notebook cell:
+
+```python
+!git clone https://github.com/kishorhange111/generative-ai-engineering.git
+%cd generative-ai-engineering
+!pip install -q -r requirements.txt
+!QUICK=1 python multimodal/whisper-marathi-speech-recognition/train.py   # smoke test on a tiny subset
+!python multimodal/whisper-marathi-speech-recognition/train.py           # full run (time-budgeted)
+```
+Outputs (`metrics.json`, samples, logs) are written to `$OUT` (default `/content/whisper_mr`); copy them to Google Drive before the runtime is recycled.
+
 Data: FLEURS (Conneau et al., 2022), CC BY 4.0.

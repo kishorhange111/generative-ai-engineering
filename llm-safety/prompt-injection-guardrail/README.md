@@ -39,3 +39,15 @@ DeBERTa-v3 was the first choice: trained in bf16 it collapsed to predicting one 
 pip install torch transformers datasets scikit-learn
 python llm-safety/prompt-injection-guardrail/train.py      # ~15 min on an L4
 ```
+
+## Run on Colab
+Trained on **Google Colab Pro** with an **NVIDIA L4 (24 GB)** runtime (*Runtime → Change runtime type → L4 GPU*). In a notebook cell:
+
+```python
+!git clone https://github.com/kishorhange111/generative-ai-engineering.git
+%cd generative-ai-engineering
+!pip install -q -r requirements.txt
+!QUICK=1 python llm-safety/prompt-injection-guardrail/train.py   # smoke test on a tiny subset
+!python llm-safety/prompt-injection-guardrail/train.py           # full run (time-budgeted)
+```
+`metrics.json` is written to `$OUT` (default `/content/guardrail`); copy it to Google Drive before the runtime is recycled.

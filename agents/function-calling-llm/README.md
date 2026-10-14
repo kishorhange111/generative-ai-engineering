@@ -19,12 +19,13 @@ Agent frameworks (LangChain / LangGraph / CrewAI tools, OpenAI-style function ca
 | **Full-call exact match** (right tool **and** arguments, compared as JSON) | 16.7 % | **94.8 %** |
 | Valid JSON when a call is attempted | 62.3 % | **100 %** |
 
-**From "unusable as an agent" to 95 % exactly-correct tool calls in 48 minutes on one GPU.**
+**95 % exactly-correct tool calls in glaive's format after 48 minutes of LoRA on one GPU.**
 
 ## Discussion points
 - **Why the zero-shot model fails:** it knows *what* to do but not the required protocol — it wraps calls in prose, invents keys, or emits invalid JSON. Fine-tuning mostly teaches the **contract** (format, when to abstain), which is exactly what agents need to be reliable.
 - **Abstention matters:** 96 % call-decision accuracy includes correctly *not* calling a tool for chit-chat — false tool calls are as harmful as missed ones.
-- **Caveat:** test and training data come from the same generator (glaive). Real-world robustness needs out-of-distribution evaluation, e.g. the Berkeley Function-Calling Leaderboard, multi-turn/parallel calls and tool errors.
+- **Caveat, baseline:** the zero-shot column asks the model to use glaive's `<functioncall>` format, which Qwen2.5 was never trained on. Qwen2.5-Instruct has its own native tool-calling format (`apply_chat_template(..., tools=...)`, emitting `<tool_call>` blocks), and with that format its zero-shot score would be much higher than 16.7 %. So the gain here is "learning this protocol", not "learning tool use from scratch"; a fair zero-shot baseline would use the native template.
+- **Caveat, data:** test and training data come from the same generator (glaive). Real-world robustness needs out-of-distribution evaluation, e.g. the Berkeley Function-Calling Leaderboard, multi-turn/parallel calls and tool errors.
 - **Production pattern:** small fine-tuned model for routing / tool calls + constrained decoding (JSON schema grammar) for guaranteed validity + a larger model only for open-ended answers.
 
 ## Run
@@ -32,3 +33,15 @@ Agent frameworks (LangChain / LangGraph / CrewAI tools, OpenAI-style function ca
 pip install torch transformers datasets peft
 python agents/function-calling-llm/train.py        # ~65 min on an L4 incl. evaluations
 ```
+
+## Run on Colab
+Trained on **Google Colab Pro** with an **NVIDIA L4 (24 GB)** runtime (*Runtime → Change runtime type → L4 GPU*). In a notebook cell:
+
+```python
+!git clone https://github.com/kishorhange111/generative-ai-engineering.git
+%cd generative-ai-engineering
+!pip install -q -r requirements.txt
+!QUICK=1 python agents/function-calling-llm/train.py   # smoke test on a tiny subset
+!python agents/function-calling-llm/train.py           # full run (time-budgeted)
+```
+Outputs (`metrics.json`, samples, logs) are written to `$OUT` (default `/content/function_calling`); copy them to Google Drive before the runtime is recycled.

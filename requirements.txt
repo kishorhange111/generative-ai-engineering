@@ -1,0 +1,20 @@
+# Runtime dependencies for every project in this repository (GPU training on Colab).
+# Lower bounds = versions the scripts were developed with; upper bounds guard against
+# breaking major releases. Install with:  pip install -r requirements.txt
+torch>=2.5,<3
+transformers>=4.57,<6
+datasets>=3.0,<5
+accelerate>=1.0,<2
+peft>=0.13,<1
+trl>=0.20,<1
+bitsandbytes>=0.44,<1          # 4-bit NF4 quantization (QLoRA)
+sentence-transformers>=3.3,<6  # embedding fine-tuning + cross-encoder reranking
+faiss-cpu>=1.8,<2
+rank-bm25>=0.2.2,<0.3
+qwen-vl-utils>=0.0.8,<0.1
+jiwer>=3.0,<5                  # WER / CER
+soundfile>=0.12,<1
+librosa>=0.10,<1
+scikit-learn>=1.5,<2
+numpy>=1.26,<3
+matplotlib>=3.8,<4

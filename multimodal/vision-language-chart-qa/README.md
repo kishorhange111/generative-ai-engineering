@@ -50,3 +50,15 @@ pip install torch transformers datasets peft qwen-vl-utils
 python multimodal/vision-language-chart-qa/train.py        # ~30 min incl. evaluation on an A100
 QUICK=1 python multimodal/vision-language-chart-qa/train.py
 ```
+
+## Run on Colab
+Trained on **Google Colab Pro** with an **NVIDIA A100 40 GB** runtime (*Runtime → Change runtime type → A100 GPU*). In a notebook cell:
+
+```python
+!git clone https://github.com/kishorhange111/generative-ai-engineering.git
+%cd generative-ai-engineering
+!pip install -q -r requirements.txt
+!QUICK=1 python multimodal/vision-language-chart-qa/train.py   # smoke test on a tiny subset
+!python multimodal/vision-language-chart-qa/train.py           # full run (time-budgeted)
+```
+Outputs (`metrics.json`, samples, logs) are written to `$OUT` (default `/content/vlm_chartqa`); copy them to Google Drive before the runtime is recycled.
