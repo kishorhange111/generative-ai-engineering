@@ -25,76 +25,58 @@ SETUP: Qwen2.5-1.5B-Instruct, GSM8K grade-school math (7.5k train / 1.3k test),
 Hugging Face TRL's GRPOTrainer, bf16 on one A100, fixed time budget.
 EVALUATION: greedy decoding on held-out GSM8K test questions, same prompt
 before and after RL: answer accuracy and format compliance.
+
+The reward functions and answer parsers live in `common/reasoning.py` and are
+unit-tested in `tests/test_reasoning.py` - in RL, a bug in the reward is a bug
+in what the model learns.
 """
 import json
 import os
-import re
+import sys
 import time
 
 import torch
 
-QUICK = os.environ.get("QUICK") == "1"
+# Make the repo root importable so `common/` works from any working directory.
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+from common.reasoning import (
+    correctness_reward,
+    extract_answer,
+    format_reward,
+    is_well_formatted,
+    same_number,
+    to_prompt,
+)
+
+QUICK = os.environ.get("QUICK") == "1"                    # 4-step smoke test
 MODEL = os.environ.get("MODEL", "Qwen/Qwen2.5-1.5B-Instruct")
 OUT = os.environ.get("OUT", "/content/grpo_gsm8k")
 N_TEST = 64 if QUICK else int(os.environ.get("N_TEST", "500"))
 MAX_STEPS = 4 if QUICK else int(os.environ.get("MAX_STEPS", "400"))
-TIME_BUDGET_HOURS = float(os.environ.get("TIME_BUDGET_HOURS", "1.2"))
-SYSTEM = ("You are a careful math tutor. First think step by step inside <think> </think> tags, "
-          "then give only the final numeric answer inside <answer> </answer> tags.")
+TIME_BUDGET_HOURS = float(os.environ.get("TIME_BUDGET_HOURS", "1.2"))   # whichever comes first: steps or time
 
 
-def gold_answer(solution):
-    """GSM8K solutions end with '#### 42'."""
-    return solution.split("####")[-1].strip().replace(",", "")
-
-
-def extract_answer(text):
-    m = re.search(r"<answer>(.*?)</answer>", text, re.S)
-    s = m.group(1) if m else text
-    nums = re.findall(r"-?\d[\d,]*\.?\d*", s)
-    return nums[-1].replace(",", "").rstrip(".") if nums else None
-
-
-def same_number(a, b):
-    try:
-        return a is not None and abs(float(a) - float(b)) < 1e-6
-    except ValueError:
-        return False
-
-
-FORMAT_RE = re.compile(r"^\s*<think>.+?</think>\s*<answer>.+?</answer>\s*$", re.S)
-
-
-# ---- reward functions (TRL passes extra dataset columns, e.g. `answer`, as keyword arguments) ----
-def correctness_reward(prompts, completions, answer, **kw):
-    return [1.0 if same_number(extract_answer(c[0]["content"]), a) else 0.0 for c, a in zip(completions, answer)]
-
-
-def format_reward(prompts, completions, **kw):
-    return [0.5 if FORMAT_RE.match(c[0]["content"]) else 0.0 for c in completions]
-
-
-def to_prompt(ex):
-    return {"prompt": [{"role": "system", "content": SYSTEM}, {"role": "user", "content": ex["question"]}],
-            "answer": gold_answer(ex["answer"])}
-
-
-@torch.no_grad()
+@torch.no_grad()   # inference only
 def evaluate(model, tok, test, label):
+    """Greedy-decode every test question and report accuracy and format compliance.
+
+    Returns (metrics, samples) where samples are 6 example outputs for the README.
+    """
     model.eval()
-    tok.padding_side = "left"
+    tok.padding_side = "left"   # left padding for batched generation with a decoder-only model
     correct = formatted = 0
     samples, t = [], time.time()
     for i in range(0, len(test), 32):
         batch = test.select(range(i, min(i + 32, len(test))))
         texts = [tok.apply_chat_template(ex["prompt"], add_generation_prompt=True, tokenize=False) for ex in batch]
         enc = tok(texts, return_tensors="pt", padding=True, add_special_tokens=False).to(model.device)
+        # 512 new tokens leaves room for a full chain of thought.
         out = model.generate(**enc, max_new_tokens=512, do_sample=False, pad_token_id=tok.pad_token_id)
-        for ex, g in zip(batch, out[:, enc["input_ids"].shape[1]:]):
+        for ex, g in zip(batch, out[:, enc["input_ids"].shape[1]:]):   # keep only the generated part
             text = tok.decode(g, skip_special_tokens=True)
             ok = same_number(extract_answer(text), ex["answer"])
             correct += ok
-            formatted += bool(FORMAT_RE.match(text))
+            formatted += is_well_formatted(text)
             if len(samples) < 6:
                 samples.append({"question": ex["prompt"][1]["content"], "gold": ex["answer"],
                                 "output": text[-700:], "correct": bool(ok)})
@@ -105,36 +87,45 @@ def evaluate(model, tok, test, label):
 
 
 def main():
+    """Evaluate -> GRPO training (time-budgeted) -> evaluate -> save metrics, samples and logs."""
     from datasets import load_dataset
     from transformers import AutoModelForCausalLM, AutoTokenizer, TrainerCallback
     from trl import GRPOConfig, GRPOTrainer
 
     os.makedirs(OUT, exist_ok=True)
     ds = load_dataset("openai/gsm8k", "main")
+    # Only the question and the final number are kept: the worked solutions are never used for training.
     train = ds["train"].shuffle(seed=42).map(to_prompt, remove_columns=ds["train"].column_names)
     test = ds["test"].shuffle(seed=42).select(range(N_TEST)).map(to_prompt, remove_columns=ds["test"].column_names)
 
     tok = AutoTokenizer.from_pretrained(MODEL)
+    # sdpa = PyTorch's fused scaled-dot-product attention (FlashAttention-style kernels).
     model = AutoModelForCausalLM.from_pretrained(MODEL, dtype=torch.bfloat16, attn_implementation="sdpa").to("cuda")
     base_res, base_samples = evaluate(model, tok, test, "before RL")
-    tok.padding_side = "left"
+    tok.padding_side = "left"   # GRPO also generates, so keep left padding
 
     class TimeBudget(TrainerCallback):
+        """Stop training once TIME_BUDGET_HOURS of wall-clock time are used."""
+
         def __init__(self):
             self.deadline = time.time() + TIME_BUDGET_HOURS * 3600
 
         def on_step_end(self, args, state, control, **k):
+            """Request a stop after the current step once the deadline has passed."""
             if time.time() > self.deadline:
                 print(f"[time budget] stop at step {state.global_step}")
                 control.should_training_stop = True
             return control
 
     args = GRPOConfig(
+        # RL fine-tuning uses a tiny LR: large policy updates quickly collapse generation quality.
         output_dir=OUT, max_steps=MAX_STEPS, learning_rate=2e-6, lr_scheduler_type="constant_with_warmup",
         warmup_steps=0.03, per_device_train_batch_size=16, gradient_accumulation_steps=2,
         num_generations=8,                 # G: answers sampled per question (16 x 2 / 8 = 4 questions per step)
+        # temperature 0.9: enough diversity inside a group for rewards (and advantages) to differ.
         max_completion_length=384, temperature=0.9, beta=0.04,   # KL penalty to the starting model
         bf16=True, gradient_checkpointing=True, logging_steps=5, save_strategy="no", report_to="none", seed=42)
+    # Rewards are summed: max 1.5 per completion (correct + well formatted).
     trainer = GRPOTrainer(model=model, processing_class=tok, reward_funcs=[correctness_reward, format_reward],
                           args=args, train_dataset=train, callbacks=[TimeBudget()])
     t = time.time()
