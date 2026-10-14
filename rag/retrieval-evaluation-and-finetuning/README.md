@@ -45,7 +45,7 @@ Trained on **Google Colab Pro** with an **NVIDIA A100 40 GB** runtime (*Runtime 
 !git clone https://github.com/kishorhange111/generative-ai-engineering.git
 %cd generative-ai-engineering
 !pip install -q -r requirements.txt
-!QUICK=1 python rag/retrieval-evaluation-and-finetuning/train.py   # smoke test on a tiny subset
+!QUICK=1 OUT=/content/smoke python rag/retrieval-evaluation-and-finetuning/train.py   # smoke test (keeps results/ intact)
 !python rag/retrieval-evaluation-and-finetuning/train.py           # full run (time-budgeted)
 ```
 Outputs (`metrics.json`, `results.md`, the comparison plot) are written to the project's `results/` folder, or to `$OUT` if set.
