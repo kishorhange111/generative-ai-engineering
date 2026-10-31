@@ -8,3 +8,9 @@ checkpoints/
 .ruff_cache/
 .pytest_cache/
 .venv/
+build/
+dist/
+*.egg-info/
+.coverage
+.ipynb_checkpoints/
+.env

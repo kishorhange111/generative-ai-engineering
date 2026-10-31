@@ -2,7 +2,7 @@
 
 import json
 
-from common.function_calling import INSTRUCTION, call_metrics, fc_messages, parse_call, parse_glaive_example
+from genai_common.function_calling import INSTRUCTION, call_metrics, fc_messages, parse_call, parse_glaive_example
 
 SYSTEM = 'SYSTEM: You are a helpful assistant with access to the following functions. {"name": "get_rate"}'
 

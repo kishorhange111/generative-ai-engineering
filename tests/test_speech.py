@@ -4,7 +4,7 @@ import pytest
 
 pytest.importorskip("jiwer")
 
-from common.speech import wer_cer  # noqa: E402
+from genai_common.speech import wer_cer  # noqa: E402
 
 
 def test_perfect_transcription():

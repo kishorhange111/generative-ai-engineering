@@ -24,7 +24,7 @@ PIPELINE STAGES COMPARED (same 648 test questions for every stage):
                          for 57k passages, very accurate for 50: the standard
                          "retrieve fast, then rerank" production design.
 
-METRICS (standard IR metrics, computed from scratch in `common/retrieval.py`
+METRICS (standard IR metrics, computed from scratch in `src/genai_common/retrieval.py`
 and unit-tested in `tests/test_retrieval.py`):
     nDCG@10   - ranking quality of the top 10, rewards relevant hits near the top
     Recall@10 / Recall@100 - share of relevant passages found in the top k
@@ -39,9 +39,9 @@ import time
 
 import numpy as np
 
-# Make the repo root importable so `common/` works from any working directory.
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-from common.retrieval import bm25_tokenize, ir_metrics
+# Make <repo>/src importable so `genai_common` works without `pip install -e .`.
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "src"))  # <repo>/src
+from genai_common.retrieval import bm25_tokenize, ir_metrics
 
 QUICK = os.environ.get("QUICK") == "1"  # small corpus + 50 questions smoke test
 OUT = os.environ.get("OUT", os.path.join(os.path.dirname(os.path.abspath(__file__)), "results"))

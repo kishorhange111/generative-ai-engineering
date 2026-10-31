@@ -23,7 +23,7 @@ METRICS on held-out conversations (same prompt before/after):
     full-call exact match   - right function AND arguments equal as JSON
     valid JSON rate         - parsable call when a call was attempted
 
-The data parser, call parser and metrics live in `common/function_calling.py`
+The data parser, call parser and metrics live in `src/genai_common/function_calling.py`
 and are unit-tested in `tests/test_function_calling.py`.
 """
 
@@ -34,12 +34,12 @@ import time
 
 import torch
 
-# Make the repo root importable so `common/` works from any working directory.
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-from common.function_calling import call_metrics
-from common.function_calling import fc_messages as messages  # messages(ex, with_answer)
-from common.function_calling import parse_glaive_example as parse
-from common.lm_data import masked_labels, pad_batch
+# Make <repo>/src importable so `genai_common` works without `pip install -e .`.
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "src"))  # <repo>/src
+from genai_common.function_calling import call_metrics
+from genai_common.function_calling import fc_messages as messages  # messages(ex, with_answer)
+from genai_common.function_calling import parse_glaive_example as parse
+from genai_common.lm_data import masked_labels, pad_batch
 
 QUICK = os.environ.get("QUICK") == "1"  # tiny smoke test
 MODEL = os.environ.get("MODEL", "Qwen/Qwen2.5-1.5B-Instruct")
@@ -54,7 +54,7 @@ TIME_BUDGET_HOURS = float(os.environ.get("TIME_BUDGET_HOURS", "0.8"))
 def evaluate(model, tok, test, label):
     """Greedy-generate a reply for every test conversation and compute the agent metrics.
 
-    Returns (metrics, samples) - see `common.function_calling.call_metrics` for the metric definitions.
+    Returns (metrics, samples) - see `genai_common.function_calling.call_metrics` for the metric definitions.
     """
     model.eval()
     tok.padding_side = "left"  # batched generation with a decoder-only model needs left padding

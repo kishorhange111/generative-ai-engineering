@@ -4,7 +4,7 @@ import math
 
 import pytest
 
-from common.retrieval import bm25_tokenize, ir_metrics, mrr_at_k, ndcg_at_k, recall_at_k
+from genai_common.retrieval import bm25_tokenize, ir_metrics, mrr_at_k, ndcg_at_k, recall_at_k
 
 
 def test_ndcg_perfect_and_zero():

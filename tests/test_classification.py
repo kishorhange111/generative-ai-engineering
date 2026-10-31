@@ -4,7 +4,7 @@ import pytest
 
 pytest.importorskip("sklearn")
 
-from common.classification import binary_scores  # noqa: E402
+from genai_common.classification import binary_scores  # noqa: E402
 
 
 def test_binary_scores_hand_computed():

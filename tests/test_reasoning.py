@@ -2,7 +2,7 @@
 
 import pytest
 
-from common.reasoning import (
+from genai_common.reasoning import (
     SYSTEM_PROMPT,
     correctness_reward,
     extract_answer,

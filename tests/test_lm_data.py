@@ -1,6 +1,6 @@
 """Tests for SFT loss masking and batch padding."""
 
-from common.lm_data import IGNORE_INDEX, masked_labels, pad_batch
+from genai_common.lm_data import IGNORE_INDEX, masked_labels, pad_batch
 
 
 def test_masked_labels_masks_prompt_only():

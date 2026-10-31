@@ -44,12 +44,23 @@ Hands-on projects covering the core skills of building production LLM systems �
 
 ## Layout
 ```
-<area>/<project>/   train.py · README.md · results/
-common/             pure, unit-tested helpers: SQL execution matching, GRPO rewards, tool-call parsing,
-                    IR metrics (nDCG / Recall / MRR), ChartQA relaxed accuracy, WER / CER, guardrail metrics
-tests/              pytest suite for common/ + import / docstring checks for every train.py (CPU only)
+generative-ai-engineering/
+├── agents/                 # one folder per area, one sub-folder per project:
+├── fine-tuning/            #   <area>/<project>/train.py   heavily commented training + evaluation script
+├── llm-safety/             #   <area>/<project>/README.md  approach, results, discussion, Run on Colab
+├── multimodal/             #   <area>/<project>/results/   raw metrics, logs and samples behind every number
+├── rag/
+├── reinforcement-learning/
+├── src/genai_common/       # pure, unit-tested helpers: SQL execution matching, GRPO rewards, tool-call parsing,
+│                           #   IR metrics (nDCG / Recall / MRR), ChartQA relaxed accuracy, WER / CER, guardrail metrics
+├── tests/                  # pytest suite for genai_common + import / docstring checks for every train.py (CPU only)
+├── .github/workflows/      # CI: ruff lint + format check, byte-compile every script, tests
+├── Makefile                # make install / install-dev / lint / format / test
+├── pyproject.toml          # package metadata (src/genai_common), ruff + pytest config
+├── requirements.txt        # GPU runtime stack for the training scripts
+└── requirements-dev.txt    # lint + test tooling
 ```
-Each project folder contains a heavily commented `train.py` (shared pure helpers live in `common/`), a `README.md` (approach, results, discussion) and `results/` with the raw metrics and samples. Trained on Google Colab GPUs (NVIDIA A100 / L4) with PyTorch and Hugging Face `transformers`, `peft`, `trl`, `datasets`.
+Each project folder contains a heavily commented `train.py` (shared pure helpers live in `src/genai_common/`), a `README.md` (approach, results, discussion) and `results/` with the raw metrics and samples. Trained on Google Colab GPUs (NVIDIA A100 / L4) with PyTorch and Hugging Face `transformers`, `peft`, `trl`, `datasets`.
 
 ## Running
 ```bash
@@ -60,11 +71,10 @@ Each project README has a **Run on Colab** section with the exact GPU type and c
 
 ## Development
 ```bash
-pip install torch --index-url https://download.pytorch.org/whl/cpu
-pip install -r requirements-dev.txt
-ruff check .        # lint
-pytest              # unit tests, CPU only, no downloads
+pip install torch --index-url https://download.pytorch.org/whl/cpu   # CPU build is enough for the tests
+make install-dev    # = pip install -r requirements-dev.txt -e .  (installs the shared helpers package)
+make check          # ruff lint + format check, then pytest (CPU only, no downloads)
 ```
-CI (GitHub Actions) runs `ruff check`, byte-compiles every `train.py` and runs the test suite on every push.
+CI (GitHub Actions) runs the same checks, plus a byte-compile of every `train.py`, on every push and pull request. Optional: `pip install pre-commit && pre-commit install` runs ruff before each commit.
 
 Related: [**mini-chatgpt**](https://github.com/kishorhange111/mini-chatgpt) — base LLM → SFT → DPO → benchmarks · [**deep-learning-portfolio**](https://github.com/kishorhange111/deep-learning-portfolio) — computer vision, NLP and generative models.
