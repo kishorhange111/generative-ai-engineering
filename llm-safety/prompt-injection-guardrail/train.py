@@ -21,7 +21,7 @@ EVALUATION:
     * OUT-OF-DISTRIBUTION sets never seen in training (different authors/styles
       of attacks) - the realistic test, because attackers do not follow your dataset
     * precision, recall, F1, ROC-AUC, false-positive rate on benign prompts
-      (`common/classification.py`, tested in `tests/test_classification.py`)
+      (`src/genai_common/classification.py`, tested in `tests/test_classification.py`)
     * latency per prompt (GPU, batch 1)
 """
 
@@ -33,9 +33,9 @@ import time
 import numpy as np
 import torch
 
-# Make the repo root importable so `common/` works from any working directory.
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-from common.classification import binary_scores as scores  # scores(y_true, p_attack, thr=0.5)
+# Make <repo>/src importable so `genai_common` works without `pip install -e .`.
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "src"))  # <repo>/src
+from genai_common.classification import binary_scores as scores  # scores(y_true, p_attack, thr=0.5)
 
 QUICK = os.environ.get("QUICK") == "1"  # 600 train / 200 test smoke test
 OUT = os.environ.get("OUT", "/content/guardrail")

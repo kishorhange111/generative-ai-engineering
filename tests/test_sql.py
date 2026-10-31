@@ -1,6 +1,6 @@
 """Tests for the text-to-SQL prompt, SQL clean-up and execution-based matching."""
 
-from common.sql import (
+from genai_common.sql import (
     SYSTEM_PROMPT,
     clean_sql,
     execution_accuracy,

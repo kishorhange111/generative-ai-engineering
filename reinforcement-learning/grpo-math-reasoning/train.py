@@ -26,7 +26,7 @@ Hugging Face TRL's GRPOTrainer, bf16 on one A100, fixed time budget.
 EVALUATION: greedy decoding on held-out GSM8K test questions, same prompt
 before and after RL: answer accuracy and format compliance.
 
-The reward functions and answer parsers live in `common/reasoning.py` and are
+The reward functions and answer parsers live in `src/genai_common/reasoning.py` and are
 unit-tested in `tests/test_reasoning.py` - in RL, a bug in the reward is a bug
 in what the model learns.
 """
@@ -38,9 +38,9 @@ import time
 
 import torch
 
-# Make the repo root importable so `common/` works from any working directory.
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-from common.reasoning import (
+# Make <repo>/src importable so `genai_common` works without `pip install -e .`.
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "src"))  # <repo>/src
+from genai_common.reasoning import (
     correctness_reward,
     extract_answer,
     format_reward,

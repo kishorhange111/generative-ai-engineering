@@ -2,7 +2,7 @@
 
 import pytest
 
-from common.chartqa import INSTRUCTION, chart_messages, relaxed_match
+from genai_common.chartqa import INSTRUCTION, chart_messages, relaxed_match
 
 
 @pytest.mark.parametrize(

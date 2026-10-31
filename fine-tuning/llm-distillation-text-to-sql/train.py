@@ -29,7 +29,7 @@ PIPELINE (main):
 Every arm starts from the same pretrained student, sees the same questions
 and is evaluated on the same test set - only the labels differ.
 
-Pure helpers (prompt, SQL clean-up, execution matching) live in `common/sql.py`.
+Pure helpers (prompt, SQL clean-up, execution matching) live in `src/genai_common/sql.py`.
 """
 
 import json
@@ -39,11 +39,11 @@ import time
 
 import torch
 
-# Make the repo root importable so `common/` works from any working directory.
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-from common.lm_data import masked_labels, pad_batch
-from common.sql import clean_sql, execution_accuracy, run_sql
-from common.sql import sql_messages as messages  # messages(question, context, answer=None)
+# Make <repo>/src importable so `genai_common` works without `pip install -e .`.
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "src"))  # <repo>/src
+from genai_common.lm_data import masked_labels, pad_batch
+from genai_common.sql import clean_sql, execution_accuracy, run_sql
+from genai_common.sql import sql_messages as messages  # messages(question, context, answer=None)
 
 QUICK = os.environ.get("QUICK") == "1"  # tiny smoke test
 TEACHER = "Qwen/Qwen2.5-7B-Instruct"

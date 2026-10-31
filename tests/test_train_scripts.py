@@ -3,7 +3,7 @@
 * every train.py must be valid Python and keep its `if __name__ == "__main__":` guard,
   so importing it never starts a training run;
 * scripts whose top-level imports are installed are actually imported, which checks
-  that their `common.*` imports resolve and that module-level configuration parses.
+  that their `genai_common.*` imports resolve and that module-level configuration parses.
 """
 
 import ast
@@ -38,7 +38,7 @@ def test_script_imports_without_running(path):
     try:
         spec.loader.exec_module(module)
     except ModuleNotFoundError as e:
-        if e.name and e.name.split(".")[0] == "common":
+        if e.name and e.name.split(".")[0] == "genai_common":
             raise
         pytest.skip(f"optional dependency not installed: {e.name}")
     assert callable(module.main)

@@ -33,7 +33,7 @@ PIPELINE (main):
     4. evaluate again with the same prompt, save metrics + adapter
 
 The pure helpers (prompt, SQL clean-up, execution matching) live in
-`common/sql.py` and are unit-tested in `tests/test_sql.py`.
+`src/genai_common/sql.py` and are unit-tested in `tests/test_sql.py`.
 """
 
 import json
@@ -53,11 +53,11 @@ from transformers import (
     TrainingArguments,
 )
 
-# Make the repo root importable so `common/` works when the script is launched
-# as `python fine-tuning/qlora-text-to-sql/train.py` from anywhere.
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-from common.lm_data import masked_labels, pad_batch
-from common.sql import clean_sql, is_exact_match, run_sql, sql_messages
+# Make <repo>/src importable so `genai_common` works without `pip install -e .`,
+# e.g. when launched as `python fine-tuning/qlora-text-to-sql/train.py` from anywhere.
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "src"))  # <repo>/src
+from genai_common.lm_data import masked_labels, pad_batch
+from genai_common.sql import clean_sql, is_exact_match, run_sql, sql_messages
 
 # ---------------------------------------------------------------------------
 # Configuration (environment variables let one script serve smoke tests and full runs)

@@ -23,7 +23,7 @@ correct within 5% of the gold value, text answers must match exactly
 (case-insensitive). Evaluated on held-out ChartQA *test* questions, before and
 after fine-tuning, with the same prompt.
 
-The prompt builder and the metric live in `common/chartqa.py` and are
+The prompt builder and the metric live in `src/genai_common/chartqa.py` and are
 unit-tested in `tests/test_chartqa.py`.
 """
 
@@ -34,10 +34,10 @@ import time
 
 import torch
 
-# Make the repo root importable so `common/` works from any working directory.
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-from common.chartqa import chart_messages as messages  # messages(ex, with_answer)
-from common.chartqa import relaxed_match
+# Make <repo>/src importable so `genai_common` works without `pip install -e .`.
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "src"))  # <repo>/src
+from genai_common.chartqa import chart_messages as messages  # messages(ex, with_answer)
+from genai_common.chartqa import relaxed_match
 
 QUICK = os.environ.get("QUICK") == "1"  # tiny smoke test
 MODEL = os.environ.get("MODEL", "Qwen/Qwen2-VL-2B-Instruct")

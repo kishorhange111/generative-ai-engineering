@@ -22,7 +22,7 @@ METRICS on the FLEURS Marathi test split (held-out speakers/sentences):
     CER - character error rate (fairer for Marathi's rich morphology:
           one wrong suffix makes a whole word "wrong" under WER)
     Measured for the original model (zero-shot) and after fine-tuning.
-    The metric wrapper lives in `common/speech.py` (tested in `tests/test_speech.py`).
+    The metric wrapper lives in `src/genai_common/speech.py` (tested in `tests/test_speech.py`).
 """
 
 import io
@@ -33,9 +33,9 @@ import time
 
 import torch
 
-# Make the repo root importable so `common/` works from any working directory.
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-from common.speech import wer_cer
+# Make <repo>/src importable so `genai_common` works without `pip install -e .`.
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "src"))  # <repo>/src
+from genai_common.speech import wer_cer
 
 QUICK = os.environ.get("QUICK") == "1"  # 200 train / 40 test utterances smoke test
 MODEL = os.environ.get("MODEL", "openai/whisper-small")
