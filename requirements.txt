@@ -3,7 +3,7 @@
 # breaking major releases. Install with:  pip install -r requirements.txt
 torch>=2.5,<3
 transformers>=4.57,<6
-datasets>=3.0,<5
+datasets>=5.1.0,<6
 accelerate>=1.0,<2
 peft>=0.13,<1
 trl>=0.20,<1
